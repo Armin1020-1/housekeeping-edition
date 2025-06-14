@@ -1,0 +1,175 @@
+
+<!DOCTYPE html>
+<html lang="fa">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>اپ هاوس‌کیپینگ</title>
+<style>
+  body { font-family: sans-serif; margin:1em; direction: rtl; }
+  label { display:block; margin-top:0.5em; }
+  input, select, textarea { width:100%; padding:0.5em; margin-top:0.2em; }
+  button { margin-top:1em; padding:0.5em 1em; }
+  table { width:100%; border-collapse:collapse; margin-top:1em; }
+  th, td { border:1px solid #aaa; padding:0.5em; }
+  th { background:#eee; }
+</style>
+</head>
+<body>
+
+<h2>ثبت روزانه هاوس‌کیپینگ</h2>
+
+<label>اتاق:
+  <select id="roomSelect"></select>
+</label>
+
+<label>هاوس‌کیپر:
+  <select id="hkSelect"></select>
+  <input id="hkNew" placeholder="افزودن نام جدید..." />
+</label>
+<button id="addHk">افزودن هاوس‌کیپر</button>
+
+<label>زمان ورود:
+  <input type="time" id="timeIn" />
+</label>
+<label>زمان خروج:
+  <input type="time" id="timeOut" />
+</label>
+
+<div id="checklistArea"></div>
+
+<label>یادداشت:
+  <textarea id="note" rows="2"></textarea>
+</label>
+
+<button id="saveBtn">ثبت</button>
+<button id="pdfBtn">تولید گزارش PDF</button>
+
+<table id="recordsTbl"><thead>
+<tr>
+<th>اتاق</th><th>هاوس‌کیپر</th><th>ورود</th><th>خروج</th><th>یادداشت</th><th>عملیات</th>
+</tr></thead><tbody></tbody></table>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+const rooms = [
+  { num:101, type:"Standard King Room"},{ num:102, type:"Standard King Room"},
+  { num:103, type:"Standard King Room"},{ num:104, type:"Standard King Room"},
+  { num:107, type:"Standard King Room"},{ num:202, type:"Standard King Room"},
+  { num:203, type:"Standard King Room"},{ num:204, type:"Standard King Room"},
+  { num:207, type:"Standard King Room"},{ num:305, type:"Standard King Room"},
+  { num:6, type:"Twin Room"},{ num:7, type:"Twin Room"},
+  { num:8, type:"Twin Room"},{ num:108, type:"Twin Room"},
+  { num:201, type:"Twin Room"},{ num:208, type:"Twin Room"},
+  { num:306, type:"Twin Room"},{ num:105, type:"Superior King Room"},
+  { num:106, type:"Superior King Room"},{ num:205, type:"Superior King Room"},
+  { num:206, type:"Superior King Room"},{ num:301, type:"Deluxe King Room With View"},
+  { num:302, type:"Deluxe King Room With View"},
+  { num:303, type:"Skyview Double Room"},{ num:304, type:"Skyview Double Room"}
+];
+const defaultHK = ["مهیار","هانا"];
+const checklist = [
+  "مرتب کردن تخت","جارو/تی کشیدن زمین","تعویض حوله‌ها","تعویض ملحفه‌ها",
+  "تمیز کردن حمام و توالت","شارژ مواد بهداشتی","خالی کردن سطل زباله",
+  "پر کردن آب و چای/نسکافه","بررسی وضعیت وسایل"
+];
+
+const roomSelect = document.getElementById("roomSelect");
+const hkSelect = document.getElementById("hkSelect");
+const hkNew = document.getElementById("hkNew");
+const addHkBtn = document.getElementById("addHk");
+const checklistArea = document.getElementById("checklistArea");
+const saveBtn = document.getElementById("saveBtn");
+const pdfBtn = document.getElementById("pdfBtn");
+const tbl = document.getElementById("recordsTbl").querySelector("tbody");
+
+let records = JSON.parse(localStorage.getItem("hkRecords")||"[]");
+
+function init(){
+  roomSelect.innerHTML = "";
+  rooms.forEach(r=> {
+    const o = document.createElement("option");
+    o.value = r.num; o.text = `${r.num} — ${r.type}`;
+    roomSelect.add(o);
+  });
+  hkSelect.innerHTML = "";
+  defaultHK.forEach(h=> addHKOption(h));
+  checklistArea.innerHTML = "";
+  checklist.forEach(item=> {
+    const id = "chk_"+item.replace(/\s/g,"");
+    const cb = document.createElement("input");
+    cb.type="checkbox"; cb.id=id;
+    const lb=document.createElement("label");
+    lb.htmlFor=id; lb.innerText=item;
+    checklistArea.append(cb, lb);
+  });
+  refreshTable();
+}
+
+function addHKOption(name){
+  const o = document.createElement("option");
+  o.value = name; o.text = name;
+  hkSelect.add(o);
+  hkNew.value="";
+}
+
+addHkBtn.addEventListener("click", ()=>{
+  const name = hkNew.value.trim();
+  if(name) addHKOption(name);
+});
+
+saveBtn.addEventListener("click", ()=>{
+  const rec = {
+    room: roomSelect.value,
+    hk: hkSelect.value,
+    timeIn: document.getElementById("timeIn").value,
+    timeOut: document.getElementById("timeOut").value,
+    note: document.getElementById("note").value,
+    checks: checklist.map(item=> ({
+      name:item,
+      ok: document.getElementById("chk_"+item.replace(/\s/g,"")).checked
+    }))
+  };
+  records.push(rec);
+  localStorage.setItem("hkRecords", JSON.stringify(records));
+  refreshTable();
+});
+
+function refreshTable(){
+  tbl.innerHTML="";
+  records.forEach((r,i)=> {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${r.room}</td>
+      <td>${r.hk}</td>
+      <td>${r.timeIn}</td>
+      <td>${r.timeOut}</td>
+      <td>${r.note}</td>
+      <td><button data-i="${i}">حذف</button></td>
+    `;
+    tr.querySelector("button").addEventListener("click", e=>{
+      records.splice(i,1);
+      localStorage.setItem("hkRecords", JSON.stringify(records));
+      refreshTable();
+    });
+    tbl.appendChild(tr);
+  });
+}
+
+pdfBtn.addEventListener("click", ()=>{
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({unit:"mm",format:"a4"});
+  doc.setFontSize(14);
+  doc.text("گزارش روزانه هاوس‌کیپینگ", 105, 15, null, null, "center");
+  const cols=["اتاق","هاوس‌کیپر","ورود","خروج","یادداشت"];
+  const rows = records.map(r=>[
+    r.room, r.hk, r.timeIn, r.timeOut, r.note
+  ]);
+  doc.autoTable({ head:[cols], body:rows, startY:25 });
+  doc.save(`report_${new Date().toISOString().slice(0,10)}.pdf`);
+});
+
+init();
+</script>
+</body>
+</html>
